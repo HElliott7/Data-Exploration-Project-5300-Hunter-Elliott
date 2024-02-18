@@ -1,0 +1,134 @@
+---
+title: "Data Exploration Hunter Elliott"
+author: "Hunter"
+format: docx
+editor: visual
+---
+
+## 
+
+## Liberties
+
+```{r}
+library(tidyverse)
+library(fixest)
+library(rio)
+library(lubridate)
+library(readr)
+library(dplyr)
+```
+
+Importing Google Trends Data
+
+Create a vector of filenames for all 'trends_up_to\_' files with full paths
+
+```{r}
+# Create a vector of filenames for all 'trends_up_to_' files with full paths
+file_names <- list.files(pattern = "trends_up_to_", full.names = TRUE)
+
+# Import all files and combine them into a single data frame
+combined_data <- import_list(file_names, rbind = TRUE, fill = TRUE)
+```
+
+Trim the date string to the correct format
+
+```{r}
+combined_data <- combined_data %>%
+  mutate(
+    date_string = str_sub(monthorweek, end = 10),
+    date = ymd(date_string),
+    # Floor the date to the first of the month
+    first_day_of_month = floor_date(date, unit = "month")
+  )
+```
+
+Process the combined_data to extract dates and calculate the z-score
+
+```{r}
+combined_data <- combined_data %>%
+  group_by(schname, keyword) %>%
+  mutate(z_score = (index - mean(index, na.rm = TRUE)) / sd(index, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+Aggregate to month level by taking the average of z-scores
+
+```{r}
+combined_data <- combined_data %>%
+  group_by(schname, first_day_of_month) %>%
+  summarize(average_z_score = mean(z_score, na.rm = TRUE), .groups = 'drop')
+```
+
+Import the College Scorecard data
+
+```{r}
+scorecard_data <- import("Most+Recent+Cohorts+(Scorecard+Elements).csv")
+
+# Import the ID name link data
+id_name_link <- import("id_name_link.csv")
+
+```
+
+Filter out non-unique school names
+
+```{r}
+id_name_link_unique <- id_name_link %>%
+  group_by(schname) %>%
+  mutate(n = n()) %>%
+  filter(n == 1) %>%
+  ungroup()
+
+with_id <- inner_join(combined_data, id_name_link_unique, by = "schname")
+
+final_data <- inner_join(with_id, scorecard_data, by = c("unitid" = "UNITID", "opeid" = "OPEID"))
+```
+
+Filter **`final_data`** for institutions predominantly granting bachelor's degrees
+
+```{r}
+# Assuming final_data is your combined dataset that includes the College Scorecard data
+final_data <- final_data %>%
+  filter(PREDDEG == 3)
+```
+
+Remove rows where earnings data is suppressed or missing
+
+```{r}
+final_data <- final_data %>%
+  mutate(md_earn_wne_p10_REPORTED_EARNINGS = as.character(`md_earn_wne_p10-REPORTED-EARNINGS`)) %>%
+  # Replace 'PrivacySuppressed' and any other non-numeric strings with NA
+  mutate(md_earn_wne_p10_REPORTED_EARNINGS = na_if(md_earn_wne_p10_REPORTED_EARNINGS, "PrivacySuppressed")) %>%
+  mutate(md_earn_wne_p10_REPORTED_EARNINGS = ifelse(md_earn_wne_p10_REPORTED_EARNINGS %in% c("", "NULL"), NA, md_earn_wne_p10_REPORTED_EARNINGS)) %>%
+  # Now safely convert to numeric
+  mutate(md_earn_wne_p10_REPORTED_EARNINGS = as.numeric(md_earn_wne_p10_REPORTED_EARNINGS))
+
+
+```
+
+1.  (**`high_earning`**) to indicate high-earning institutions based on a threshold.
+
+```{r}
+final_data <- final_data %>%
+  mutate(high_earning = ifelse(!is.na(md_earn_wne_p10_REPORTED_EARNINGS) & md_earn_wne_p10_REPORTED_EARNINGS >= 75000, 1, 0))
+
+
+```
+
+```{r}
+analysis_data <- final_data %>%
+  select(schname, first_day_of_month, average_z_score, PREDDEG, high_earning, md_earn_wne_p10_REPORTED_EARNINGS)
+
+```
+
+```{r}
+analysis_data <- analysis_data %>%
+  mutate(post_scorecard = ifelse(first_day_of_month >= as.Date("2015-09-01"), 1, 0))
+
+```
+
+```{r}
+# Run the regression model
+model <- lm(average_z_score ~ high_earning * post_scorecard, data = analysis_data)
+summary(model)
+
+```
