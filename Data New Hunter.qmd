@@ -16,6 +16,7 @@ library(rio)
 library(lubridate)
 library(readr)
 library(dplyr)
+library(ggplot2)
 
 ```
 
@@ -142,7 +143,15 @@ summary(model)
 Graph to visualize
 
 ```{r}
-ggplot(analysis_data, aes(x = first_day_of_month, y = average_z_score, group = group, color = group)) +
+analysis_data$group <- with(analysis_data, factor(paste0(high_earning, post_scorecard),
+                                                  levels = c("00", "10", "01", "11"),
+                                                  labels = c("Low Earning Pre-Scorecard",
+                                                             "High Earning Pre-Scorecard",
+                                                             "Low Earning Post-Scorecard",
+                                                             "High Earning Post-Scorecard")))
+
+
+ggplot(analysis_data, aes(x = first_day_of_month, y = average_z_score, color = group)) +
   geom_line() +  # Plot lines for each group
   labs(title = "Google Search Interest Over Time",
        x = "Date",
