@@ -142,29 +142,15 @@ summary(model)
 Graph to visualize
 
 ```{r}
-# Convert the 'first_day_of_month' to a Date object if not already
-analysis_data$first_day_of_month <- as.Date(analysis_data$first_day_of_month)
-
-# Create a factor variable for plotting to distinguish the groups
-analysis_data$group <- with(analysis_data, factor(paste(high_earning, post_scorecard),
-                                                  levels = c("0 0", "1 0", "0 1", "1 1"),
-                                                  labels = c("Low Earning Pre-Scorecard",
-                                                             "High Earning Pre-Scorecard",
-                                                             "Low Earning Post-Scorecard",
-                                                             "High Earning Post-Scorecard")))
-
-# Plotting
-ggplot(analysis_data, aes(x = first_day_of_month, y = average_z_score, color = group)) +
-  geom_line() +
-  geom_smooth(method = "lm", se = FALSE, aes(fill = group), alpha = 0.2) +
+ggplot(analysis_data, aes(x = first_day_of_month, y = average_z_score, group = group, color = group)) +
+  geom_line() +  # Plot lines for each group
   labs(title = "Google Search Interest Over Time",
        x = "Date",
        y = "Average Z-Score",
-       color = "Group",
-       fill = "Group") +
-  theme_minimal() +
-  theme(legend.title = element_text(size = 12),
-        legend.text = element_text(size = 10))
+       color = "Group") +
+  theme_minimal() +  # Use a minimal theme
+  theme(legend.position = "bottom")  # Move the legend to the bottom
+
 ```
 
 **Analysis of the Impact of the College Scorecard Release on Google Search Interest**
